@@ -542,9 +542,10 @@ export function App() {
                                     disabled={active}
                                     aria-pressed={enableLimit && dataLimitMB === preset.value}
                                     className={`relative py-3 px-4 rounded-xl text-sm font-semibold transition-all duration-200
-                                        ${enableLimit && dataLimitMB === preset.value
-                                            ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/30 scale-105"
-                                            : "bg-zinc-800/80 text-zinc-400 hover:bg-zinc-700 hover:text-white hover:scale-[1.02]"
+                                        ${
+                                            enableLimit && dataLimitMB === preset.value
+                                                ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/30 scale-105"
+                                                : "bg-zinc-800/80 text-zinc-400 hover:bg-zinc-700 hover:text-white hover:scale-[1.02]"
                                         }
                                         ${active ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}
                                         focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
@@ -585,9 +586,10 @@ export function App() {
                         onClick={() => (active ? stop() : start())}
                         aria-label={active ? "Stop data consumption" : "Start data consumption"}
                         className={`w-full py-5 rounded-2xl font-bold text-xl transition-all duration-300 transform
-                            ${active
-                                ? "bg-gradient-to-r from-red-600 to-red-500 text-white hover:from-red-500 hover:to-red-400 shadow-lg shadow-red-500/30"
-                                : "bg-gradient-to-r from-purple-600 via-pink-600 to-purple-600 text-white hover:scale-[1.02] shadow-2xl shadow-purple-500/40"
+                            ${
+                                active
+                                    ? "bg-gradient-to-r from-red-600 to-red-500 text-white hover:from-red-500 hover:to-red-400 shadow-lg shadow-red-500/30"
+                                    : "bg-gradient-to-r from-purple-600 via-pink-600 to-purple-600 text-white hover:scale-[1.02] shadow-2xl shadow-purple-500/40"
                             }
                             focus:outline-none focus:ring-4 focus:ring-purple-500/30 active:scale-[0.98]`}
                     >

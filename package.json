@@ -5,9 +5,8 @@
     "type": "module",
     "main": "src/server.ts",
     "scripts": {
-        "dev": "bun --hot src/server.ts",
-        "start": "NODE_ENV=production bun src/server.ts",
-        "build": "bun build src/server.ts --outdir dist --target bun --minify",
+        "dev": "bun run build.ts",
+        "build": "bun run build.ts",
         "typecheck": "tsc --noEmit",
         "clean": "rm -rf dist node_modules",
         "check": "biome check src",

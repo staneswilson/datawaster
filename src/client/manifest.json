@@ -1,0 +1,16 @@
+{
+    "name": "Data Waster Pro",
+    "short_name": "DataWaster",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#18181b",
+    "theme_color": "#7c3aed",
+    "description": "Professional Network Stress Testing Tool",
+    "icons": [
+        {
+            "src": "./favicon.svg",
+            "sizes": "512x512",
+            "type": "image/svg+xml"
+        }
+    ]
+}

@@ -1,0 +1,37 @@
+{
+    "name": "data-waster",
+    "version": "1.0.0",
+    "description": "High-performance network stress testing tool built on Bun",
+    "type": "module",
+    "main": "src/server.ts",
+    "scripts": {
+        "dev": "bun --hot src/server.ts",
+        "start": "NODE_ENV=production bun src/server.ts",
+        "build": "bun build src/server.ts --outdir dist --target bun --minify",
+        "typecheck": "tsc --noEmit",
+        "clean": "rm -rf dist node_modules",
+        "check": "biome check src",
+        "fix": "biome check --write src"
+    },
+    "keywords": [
+        "bun",
+        "network-stress-test",
+        "bandwidth-tester",
+        "data-waster",
+        "performance"
+    ],
+    "author": "",
+    "license": "MIT",
+    "dependencies": {
+        "react": "^19.0.0",
+        "react-dom": "^19.0.0"
+    },
+    "devDependencies": {
+        "@biomejs/biome": "^2.3.10",
+        "@types/bun": "latest",
+        "@types/react": "^19",
+        "@types/react-dom": "^19",
+        "bun-plugin-tailwind": "^0.1.0",
+        "tailwindcss": "^4"
+    }
+}

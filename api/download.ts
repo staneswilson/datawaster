@@ -1,15 +1,13 @@
-// Vercel Edge Runtime handler - finite chunks to avoid timeout
+// Vercel Edge Runtime - Downloads from REAL external CDNs
 export const config = {
     runtime: 'edge',
 };
 
-// 10MB per request to stay well under timeout limits
-const TARGET_BYTES = 10 * 1024 * 1024;
-const CHUNK_SIZE = 256 * 1024; // 256KB per chunk
-const CHUNKS_PER_REQUEST = Math.ceil(TARGET_BYTES / CHUNK_SIZE);
-
-// Pre-filled buffer for streaming
-const STREAMING_BUFFER = new Uint8Array(CHUNK_SIZE).fill(0xaa);
+// Real CDN test file URLs (these are actual files that will use real data)
+const TEST_URLS = [
+    "https://speed.cloudflare.com/__down?bytes=10000000", // 10MB from Cloudflare
+    "https://proof.ovh.net/files/10Mb.dat", // 10MB from OVH
+];
 
 const CORS_HEADERS: Record<string, string> = {
     "Access-Control-Allow-Origin": "*",
@@ -17,36 +15,47 @@ const CORS_HEADERS: Record<string, string> = {
     "Access-Control-Allow-Headers": "Content-Type",
 };
 
-export default function handler(request: Request): Response {
+export default async function handler(request: Request): Promise<Response> {
     if (request.method === "OPTIONS") {
         return new Response(null, { headers: CORS_HEADERS });
     }
 
-    let chunksSent = 0;
+    // Try each CDN URL until one works
+    for (const url of TEST_URLS) {
+        try {
+            const response = await fetch(url, {
+                headers: {
+                    "User-Agent": "DataWaster/1.0 (Network Test Tool)",
+                },
+            });
 
-    // Stream exactly 10MB then close - client will make another request
-    const stream = new ReadableStream({
-        pull(controller) {
-            if (chunksSent >= CHUNKS_PER_REQUEST) {
-                controller.close();
-                return;
+            if (response.ok && response.body) {
+                // Stream the REAL data from external CDN to client
+                return new Response(response.body, {
+                    status: 200,
+                    headers: {
+                        ...CORS_HEADERS,
+                        "Content-Type": "application/octet-stream",
+                        "Cache-Control": "no-store, no-cache, must-revalidate",
+                        "X-Data-Source": url,
+                    },
+                });
             }
-            controller.enqueue(STREAMING_BUFFER);
-            chunksSent++;
-        },
-        cancel() {
-            // Client cancelled, clean up
-        },
-    });
+        } catch {
+            // Try next URL
+            continue;
+        }
+    }
 
-    return new Response(stream, {
-        status: 200,
-        headers: {
-            ...CORS_HEADERS,
-            "Content-Type": "application/octet-stream",
-            "Content-Length": String(TARGET_BYTES),
-            "Cache-Control": "no-store, no-cache, must-revalidate",
-            "X-Data-Waster": "active",
-        },
-    });
+    // All CDNs failed - return error
+    return new Response(
+        JSON.stringify({ error: "All CDN sources unavailable" }),
+        {
+            status: 503,
+            headers: {
+                ...CORS_HEADERS,
+                "Content-Type": "application/json",
+            },
+        }
+    );
 }

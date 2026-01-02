@@ -1,10 +1,14 @@
-// Vercel Edge Runtime handler
+// Vercel Edge Runtime handler - finite chunks to avoid timeout
 export const config = {
     runtime: 'edge',
 };
 
-// 256KB buffer for optimal streaming throughput
-const CHUNK_SIZE = 256 * 1024;
+// 10MB per request to stay well under timeout limits
+const TARGET_BYTES = 10 * 1024 * 1024;
+const CHUNK_SIZE = 256 * 1024; // 256KB per chunk
+const CHUNKS_PER_REQUEST = Math.ceil(TARGET_BYTES / CHUNK_SIZE);
+
+// Pre-filled buffer for streaming
 const STREAMING_BUFFER = new Uint8Array(CHUNK_SIZE).fill(0xaa);
 
 const CORS_HEADERS: Record<string, string> = {
@@ -18,20 +22,20 @@ export default function handler(request: Request): Response {
         return new Response(null, { headers: CORS_HEADERS });
     }
 
-    // Create infinite stream of data chunks
-    // Each chunk travels from Vercel edge -> client = real data consumption
-    let isActive = true;
+    let chunksSent = 0;
 
+    // Stream exactly 10MB then close - client will make another request
     const stream = new ReadableStream({
         pull(controller) {
-            if (!isActive) {
+            if (chunksSent >= CHUNKS_PER_REQUEST) {
                 controller.close();
                 return;
             }
             controller.enqueue(STREAMING_BUFFER);
+            chunksSent++;
         },
         cancel() {
-            isActive = false;
+            // Client cancelled, clean up
         },
     });
 
@@ -40,6 +44,7 @@ export default function handler(request: Request): Response {
         headers: {
             ...CORS_HEADERS,
             "Content-Type": "application/octet-stream",
+            "Content-Length": String(TARGET_BYTES),
             "Cache-Control": "no-store, no-cache, must-revalidate",
             "X-Data-Waster": "active",
         },

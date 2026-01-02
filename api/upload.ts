@@ -17,13 +17,21 @@ export default async function handler(req: Request) {
         return new Response("Method Not Allowed", { status: 405, headers: CORS_HEADERS });
     }
 
+    let bytesReceived = 0;
+
     if (req.body) {
         const reader = req.body.getReader();
         while (true) {
-            const { done } = await reader.read();
+            const { done, value } = await reader.read();
             if (done) break;
+            if (value) {
+                bytesReceived += value.length;
+            }
         }
     }
 
-    return Response.json({ status: "ok" }, { headers: CORS_HEADERS });
+    return Response.json(
+        { status: "ok", bytesReceived },
+        { headers: CORS_HEADERS }
+    );
 }

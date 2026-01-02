@@ -40,7 +40,7 @@ function ToggleSwitch({
     checked,
     onChange,
     disabled,
-    activeColor = "bg-gradient-to-r from-purple-600 to-pink-600",
+    activeColor = "bg-linear-to-r from-purple-600 to-pink-600",
 }: {
     checked: boolean;
     onChange: (checked: boolean) => void;
@@ -126,6 +126,7 @@ function useDataWaster() {
     const [threads, setThreads] = useState(4);
     const [stats, setStats] = useState({ speedBps: 0, totalBytes: 0, elapsed: 0 });
     const [stoppedReason, setStoppedReason] = useState<string | null>(null);
+    const [connectionStatus, setConnectionStatus] = useState<"idle" | "connected" | "error">("idle");
 
     const [dataLimitMB, setDataLimitMB] = useState(100);
     const [enableLimit, setEnableLimit] = useState(true);
@@ -135,7 +136,8 @@ function useDataWaster() {
     const startTimeRef = useRef(0);
     const activeRef = useRef(false);
     const abortRef = useRef<AbortController | null>(null);
-    const uploadChunk = useRef(new Uint8Array(64 * 1024).fill(0xaa));
+    // 512KB upload chunks for better throughput
+    const uploadChunk = useRef(new Uint8Array(512 * 1024).fill(0xaa));
     const limitRef = useRef({ enabled: enableLimit, limitBytes: dataLimitMB * 1024 * 1024 });
 
     useEffect(() => {
@@ -150,6 +152,9 @@ function useDataWaster() {
 
     const downloadWorker = useCallback(
         async (signal: AbortSignal) => {
+            let retryCount = 0;
+            const maxRetries = 3;
+
             while (!signal.aborted && activeRef.current) {
                 try {
                     if (limitRef.current.enabled && bytesRef.current >= limitRef.current.limitBytes) {
@@ -157,8 +162,16 @@ function useDataWaster() {
                         return;
                     }
 
-                    const url = `/api/proxy?url=${encodeURIComponent("https://speed.cloudflare.com/__down?bytes=10000000")}`;
-                    const res = await fetch(url, { signal, cache: "no-store" });
+                    // Direct streaming from Vercel edge - this consumes real data
+                    const res = await fetch("/api/download", { signal, cache: "no-store" });
+
+                    if (!res.ok) {
+                        throw new Error(`HTTP ${res.status}`);
+                    }
+
+                    setConnectionStatus("connected");
+                    retryCount = 0;
+
                     const reader = res.body?.getReader();
                     if (reader) {
                         while (true) {
@@ -176,7 +189,12 @@ function useDataWaster() {
                     }
                 } catch {
                     if (signal.aborted) return;
-                    await new Promise((r) => setTimeout(r, 500));
+                    retryCount++;
+                    if (retryCount >= maxRetries) {
+                        setConnectionStatus("error");
+                    }
+                    // Exponential backoff: 500ms, 1s, 2s
+                    await new Promise((r) => setTimeout(r, Math.min(500 * 2 ** (retryCount - 1), 2000)));
                 }
             }
         },
@@ -185,6 +203,9 @@ function useDataWaster() {
 
     const uploadWorker = useCallback(
         async (signal: AbortSignal) => {
+            let retryCount = 0;
+            const maxRetries = 3;
+
             while (!signal.aborted && activeRef.current) {
                 try {
                     if (limitRef.current.enabled && bytesRef.current >= limitRef.current.limitBytes) {
@@ -192,16 +213,27 @@ function useDataWaster() {
                         return;
                     }
 
-                    await fetch("/api/upload", {
+                    const res = await fetch("/api/upload", {
                         method: "POST",
                         body: uploadChunk.current,
                         signal,
                         cache: "no-store",
                     });
+
+                    if (!res.ok) {
+                        throw new Error(`HTTP ${res.status}`);
+                    }
+
+                    setConnectionStatus("connected");
+                    retryCount = 0;
                     bytesRef.current += uploadChunk.current.length;
                 } catch {
                     if (signal.aborted) return;
-                    await new Promise((r) => setTimeout(r, 500));
+                    retryCount++;
+                    if (retryCount >= maxRetries) {
+                        setConnectionStatus("error");
+                    }
+                    await new Promise((r) => setTimeout(r, Math.min(500 * 2 ** (retryCount - 1), 2000)));
                 }
             }
         },
@@ -210,6 +242,7 @@ function useDataWaster() {
 
     const start = useCallback(() => {
         setStoppedReason(null);
+        setConnectionStatus("idle");
         startTimeRef.current = Date.now();
         bytesRef.current = 0;
         lastBytesRef.current = 0;
@@ -229,6 +262,7 @@ function useDataWaster() {
         activeRef.current = false;
         abortRef.current?.abort();
         setActive(false);
+        setConnectionStatus("idle");
     }, []);
 
     useEffect(() => {
@@ -261,6 +295,7 @@ function useDataWaster() {
         enableLimit,
         setEnableLimit,
         stoppedReason,
+        connectionStatus,
     };
 }
 
@@ -417,6 +452,7 @@ export function App() {
         enableLimit,
         setEnableLimit,
         stoppedReason,
+        connectionStatus,
     } = useDataWaster();
 
     const speed = formatSpeed(stats.speedBps);
@@ -436,7 +472,7 @@ export function App() {
                     <div className="flex items-center gap-4">
                         <div className="relative">
                             <div
-                                className={`w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-600 via-pink-600 to-purple-600 
+                                className={`w-14 h-14 rounded-2xl bg-linear-to-br from-purple-600 via-pink-600 to-purple-600 
                                 flex items-center justify-center shadow-2xl overflow-hidden p-3
                                 ${active ? "pulse-glow" : ""}`}
                             >
@@ -453,7 +489,7 @@ export function App() {
                         <div>
                             <h1 className="text-2xl md:text-3xl font-black tracking-tight">
                                 DATA
-                                <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                                <span className="bg-linear-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
                                     WASTER
                                 </span>
                                 <span className="ml-2 text-xs font-medium text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded-full align-middle">
@@ -467,13 +503,29 @@ export function App() {
                     <div className="flex items-center gap-3">
                         <div
                             className={`flex items-center gap-2 px-4 py-2 rounded-full glass border
-                            ${active ? "border-green-500/50 text-green-400" : "border-zinc-700 text-zinc-500"}`}
+                            ${connectionStatus === "error"
+                                    ? "border-red-500/50 text-red-400"
+                                    : active
+                                        ? "border-green-500/50 text-green-400"
+                                        : "border-zinc-700 text-zinc-500"
+                                }`}
                         >
                             <span
-                                className={`w-2 h-2 rounded-full ${active ? "bg-green-500 animate-pulse" : "bg-zinc-600"}`}
+                                className={`w-2 h-2 rounded-full ${connectionStatus === "error"
+                                    ? "bg-red-500 animate-pulse"
+                                    : active
+                                        ? "bg-green-500 animate-pulse"
+                                        : "bg-zinc-600"
+                                    }`}
                             />
                             <span className="text-sm font-medium">
-                                {active ? "RUNNING" : stoppedReason ? "COMPLETE" : "READY"}
+                                {connectionStatus === "error"
+                                    ? "CONNECTION ERROR"
+                                    : active
+                                        ? "CONSUMING DATA"
+                                        : stoppedReason
+                                            ? "COMPLETE"
+                                            : "READY"}
                             </span>
                         </div>
                     </div>
@@ -509,7 +561,7 @@ export function App() {
                         </div>
                         <div className="relative h-3 bg-zinc-800 rounded-full overflow-hidden">
                             <div
-                                className="absolute inset-y-0 left-0 bg-gradient-to-r from-purple-600 via-pink-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
+                                className="absolute inset-y-0 left-0 bg-linear-to-r from-purple-600 via-pink-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
                                 style={{ width: `${progress}%` }}
                             />
                             <div className="absolute inset-0 shimmer rounded-full" />
@@ -542,10 +594,9 @@ export function App() {
                                     disabled={active}
                                     aria-pressed={enableLimit && dataLimitMB === preset.value}
                                     className={`relative py-3 px-4 rounded-xl text-sm font-semibold transition-all duration-200
-                                        ${
-                                            enableLimit && dataLimitMB === preset.value
-                                                ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/30 scale-105"
-                                                : "bg-zinc-800/80 text-zinc-400 hover:bg-zinc-700 hover:text-white hover:scale-[1.02]"
+                                        ${enableLimit && dataLimitMB === preset.value
+                                            ? "bg-linear-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/30 scale-105"
+                                            : "bg-zinc-800/80 text-zinc-400 hover:bg-zinc-700 hover:text-white hover:scale-[1.02]"
                                         }
                                         ${active ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}
                                         focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
@@ -576,7 +627,7 @@ export function App() {
                             checked={!enableLimit}
                             onChange={(checked) => setEnableLimit(!checked)}
                             disabled={active}
-                            activeColor="bg-gradient-to-r from-amber-500 to-red-500"
+                            activeColor="bg-linear-to-r from-amber-500 to-red-500"
                         />
                     </div>
 
@@ -586,10 +637,9 @@ export function App() {
                         onClick={() => (active ? stop() : start())}
                         aria-label={active ? "Stop data consumption" : "Start data consumption"}
                         className={`w-full py-5 rounded-2xl font-bold text-xl transition-all duration-300 transform
-                            ${
-                                active
-                                    ? "bg-gradient-to-r from-red-600 to-red-500 text-white hover:from-red-500 hover:to-red-400 shadow-lg shadow-red-500/30"
-                                    : "bg-gradient-to-r from-purple-600 via-pink-600 to-purple-600 text-white hover:scale-[1.02] shadow-2xl shadow-purple-500/40"
+                            ${active
+                                ? "bg-linear-to-r from-red-600 to-red-500 text-white hover:from-red-500 hover:to-red-400 shadow-lg shadow-red-500/30"
+                                : "bg-linear-to-r from-purple-600 via-pink-600 to-purple-600 text-white hover:scale-[1.02] shadow-2xl shadow-purple-500/40"
                             }
                             focus:outline-none focus:ring-4 focus:ring-purple-500/30 active:scale-[0.98]`}
                     >

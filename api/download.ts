@@ -2,14 +2,9 @@ export const config = {
     runtime: 'edge',
 };
 
-const STREAMING = {
-    CHUNK_SIZE: 1024 * 1024,
-    BUFFER: (() => {
-        const buf = new Uint8Array(1024 * 1024);
-        buf.fill(0xaa);
-        return buf;
-    })(),
-};
+// 256KB buffer for optimal streaming throughput
+const CHUNK_SIZE = 256 * 1024;
+const STREAMING_BUFFER = new Uint8Array(CHUNK_SIZE).fill(0xaa);
 
 const CORS_HEADERS = {
     "Access-Control-Allow-Origin": "*",
@@ -22,9 +17,11 @@ export default function handler(req: Request) {
         return new Response(null, { headers: CORS_HEADERS });
     }
 
+    // Create infinite stream of data chunks
+    // Each chunk travels from Vercel edge -> client = real data consumption
     const stream = new ReadableStream({
         pull(controller: ReadableStreamDefaultController) {
-            controller.enqueue(STREAMING.BUFFER);
+            controller.enqueue(STREAMING_BUFFER);
         },
     });
 
@@ -32,7 +29,9 @@ export default function handler(req: Request) {
         headers: {
             ...CORS_HEADERS,
             "Content-Type": "application/octet-stream",
-            "Cache-Control": "no-store",
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Transfer-Encoding": "chunked",
+            "X-Data-Waster": "active",
         },
     });
 }

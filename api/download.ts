@@ -23,7 +23,7 @@ export default function handler(req: Request) {
     }
 
     const stream = new ReadableStream({
-        pull(controller) {
+        pull(controller: ReadableStreamDefaultController) {
             controller.enqueue(STREAMING.BUFFER);
         },
     });

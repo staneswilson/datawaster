@@ -2,8 +2,6 @@
  * Local Development Server
  * Serves static files from dist/ and handles API routes
  */
-
-import proxyHandler from "./api/proxy";
 import downloadHandler from "./api/download";
 import uploadHandler from "./api/upload";
 
@@ -17,9 +15,6 @@ const server = Bun.serve({
         const pathname = url.pathname;
 
         // API Routes
-        if (pathname === "/api/proxy") {
-            return proxyHandler(req);
-        }
         if (pathname === "/api/download") {
             return downloadHandler(req);
         }

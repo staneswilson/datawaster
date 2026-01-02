@@ -1,26 +1,27 @@
+// Vercel Edge Runtime handler
 export const config = {
     runtime: 'edge',
 };
 
-const CORS_HEADERS = {
+const CORS_HEADERS: Record<string, string> = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
 };
 
-export default async function handler(req: Request) {
-    if (req.method === "OPTIONS") {
+export default async function handler(request: Request): Promise<Response> {
+    if (request.method === "OPTIONS") {
         return new Response(null, { headers: CORS_HEADERS });
     }
 
-    if (req.method !== "POST") {
+    if (request.method !== "POST") {
         return new Response("Method Not Allowed", { status: 405, headers: CORS_HEADERS });
     }
 
     let bytesReceived = 0;
 
-    if (req.body) {
-        const reader = req.body.getReader();
+    if (request.body) {
+        const reader = request.body.getReader();
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
@@ -30,8 +31,14 @@ export default async function handler(req: Request) {
         }
     }
 
-    return Response.json(
-        { status: "ok", bytesReceived },
-        { headers: CORS_HEADERS }
+    return new Response(
+        JSON.stringify({ status: "ok", bytesReceived }),
+        {
+            status: 200,
+            headers: {
+                ...CORS_HEADERS,
+                "Content-Type": "application/json",
+            },
+        }
     );
 }
